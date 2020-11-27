@@ -90,7 +90,7 @@ if __name__ == '__main__':
     test = data.iloc[n * 128:n * 128 + 128].values
 
     # Пример использования
-    mdl = Model('face', ['back', 'forward', 'left', 'neutral', 'right'])
+    mdl = Model('face1', ['back', 'forward', 'left', 'neutral', 'right'])
     result = mdl.process_data(test)
 
     print('Значение в данных: ', data.iloc[n * 128, 0])
