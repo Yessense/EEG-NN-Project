@@ -86,7 +86,7 @@ if __name__ == '__main__':
     # Тест на первую запись в файле
     print('Начало теста')
     n = 0  # Номер записи для проверки
-    data = pd.read_csv('data.csv')
+    data = pd.read_csv('../DataRecording/data.csv')
     test = data.iloc[n * 128:n * 128 + 128].values
 
     # Пример использования
