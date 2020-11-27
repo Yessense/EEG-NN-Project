@@ -5,10 +5,8 @@ import torch  # PyTorch
 from sklearn import preprocessing
 from torch.nn import functional as F
 
-import Classifier as cs
-import utils
-
-
+from NN.Classifier import Classifier
+from NN.utils import create_fft, normalize
 class Model:
 
     def __init__(self, model_name, classes):
@@ -48,7 +46,7 @@ class Model:
 
     def load_model(self):
         # Загрузка модели
-        self.model = cs.Classifier(self.raw_ni, self.fft_ni, self.num_classes)
+        self.model = Classifier(self.raw_ni, self.fft_ni, self.num_classes)
         self.model.load_state_dict(torch.load(self.model_folder + self.model_name + self.model_file_extension))
         self.model.eval()
 
@@ -66,11 +64,11 @@ class Model:
         X = preprocessing.normalize(X, norm='max', axis=1)
 
         # Создаем признаки при помощи трансформации Фурье
-        X_fft = utils.create_fft(X)
+        X_fft = create_fft(X)
 
         # Нормализуем данные
-        X = utils.normalize(X, self.X_mean, self.X_std)
-        X_fft = utils.normalize(X_fft, self.X_fft_mean, self.X_fft_std)
+        X = normalize(X, self.X_mean, self.X_std)
+        X_fft = normalize(X_fft, self.X_fft_mean, self.X_fft_std)
 
         X_t = torch.tensor(X).float()
         X_fft_t = torch.tensor(X_fft).float()

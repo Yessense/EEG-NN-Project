@@ -103,16 +103,8 @@ class Scheduler:
 
 
 class Classifier(nn.Module):
-    def __init__(self, raw_ni, fft_ni, no,
-                 X_mean=None, X_std=None, X_fft_mean=None, X_fft_std=None,
-                 drop=.5):
+    def __init__(self, raw_ni, fft_ni, no, drop=.5):
         super().__init__()
-
-        # Добавляем параметры нормализации
-        self.X_mean = X_mean
-        self.X_std = X_std
-        self.X_fft_mean = X_fft_mean
-        self.X_fft_std = X_fft_std
 
         self.raw = nn.Sequential(
             SepConv1d(raw_ni, 32, 8, 2, 3, drop=drop),

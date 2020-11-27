@@ -18,11 +18,11 @@ from random import choice
 import numpy as np
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from example_epoc_plus import EEG, tasks
+from DataRecording.example_epoc_plus import EEG, tasks
 
 sys.path.insert(1, '../NN')
 
-from Model import Model
+from NN.Model import Model
 
 # EEG class
 cyHeadset = None
@@ -57,13 +57,12 @@ model = None
 def processData(data):
     global model
     if model is not None:
-        s = model.process_data(np.array(data, dtype='O'))
-        mainWidget.addLine.emit(s)
+        addTextToWidget(model.process_data(np.array(data, dtype = 'O')))
 
 
 def dataReceived(value):
     global data
-    for i in range(2, len(value)):
+    for i in range(2,len(value)):
         value[i] = float(value[i])
     data.append(value)
     if len(data) >= HEADSET_FREQUENCY:
@@ -73,8 +72,10 @@ def dataReceived(value):
 
 def addTextToWidget(text):
     """Добавляет в виджет новую строку текста"""
-    mainWidget.textWidget.setText(
-        mainWidget.textWidget.toPlainText() + text + '\n')
+    print(text)
+    # print(type(mainWidget.textWidget))
+    # mainWidget.textWidget.setText('asdfasdf' + '\n')
+    # print('asdf')
 
 
 class RecordingThread(Thread):
@@ -91,35 +92,15 @@ class RecordingThread(Thread):
 
     def run(self):
         global cyHeadset
-        if not isDebugging:
-            for _ in range(self.seconds * HEADSET_FREQUENCY):
-                if self._stopRecording:
-                    break
+        for _ in range(self.seconds * HEADSET_FREQUENCY):
+            if self._stopRecording:
+                break
+            if not isDebugging:
                 line = [self.type, str(self.iterNumber)]
                 line.extend([str(value) for value
                              in eval(cyHeadset.get_data())])
                 self.data.append(line)
                 dataReceived(line)
-        else:
-            # Считывание данных из файла data.csv для тестирования
-            data = []
-            f = open('data.csv', 'r')
-            f.readline()
-            for _ in range(self.seconds * HEADSET_FREQUENCY):
-                data.append(f.readline().split(','))
-                for i in range(2, len(data[-1])):
-                    data[-1][i] = float(data[-1][i])
-            f.close()
-            print('file closed')
-            for i in range(0, len(data), 2):
-                # Цикл странный, потому что sleep ждет
-                # в больше необходимого времени при небольших
-                # значениях аргумента
-                if self._stopRecording:
-                    break
-                dataReceived(data[i])
-                dataReceived(data[i+1])
-                sleep(1 / HEADSET_FREQUENCY)
 
     def getData(self):
         return self.data
@@ -129,13 +110,10 @@ class Widget(QtWidgets.QWidget):
     _isRecording = False
     timeout = QtCore.pyqtSignal()
     recordingInterrupted = QtCore.pyqtSignal()
-    addLine = QtCore.pyqtSignal('QString')
 
     def __init__(self, model):
         global IMAGES_DIR
         super().__init__()
-
-        self.addLine.connect(self.addLineToTextWidget)
 
         self.imagesDir = IMAGES_DIR + '/' + model
 
@@ -463,10 +441,6 @@ class Widget(QtWidgets.QWidget):
                 pass
         return count
 
-    def addLineToTextWidget(self, line):
-        self.textWidget.setText(
-            self.textWidget.toPlainText() + line + '\n'
-        )
 
 class CounterWidget(QtWidgets.QWidget):
     def __init__(self, type, oldCount, newCount=0):
@@ -523,10 +497,7 @@ class ModelListWidget(QtWidgets.QWidget):
         self.radioButtons[0].setChecked(True)
 
         self.returnButton = QtWidgets.QPushButton("Ок")
-        layout.addWidget(self.returnButton)
 
-        self.setLayout(layout)
-        
     def getModel(self):
         loop = QtCore.QEventLoop()
         self.returnButton.clicked.connect(loop.quit)
@@ -542,6 +513,7 @@ def getModel():
     for a in l:
         if os.path.isdir(IMAGES_DIR + '/' + a):
             models.append(a)
+    print(models)
     if len(models) == 1:
         return models[0]
     w = ModelListWidget(models)
@@ -608,4 +580,8 @@ if __name__ == '__main__':
     recordingChecker.timeout.connect(checkRecording)
     recordingChecker.start(500)
 
-    # sys.exit(app.exec_())
+    sys.exit(app.exec_())
+
+
+
+
