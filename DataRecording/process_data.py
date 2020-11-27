@@ -89,6 +89,7 @@ if __name__ == '__main__':
     data = pd.read_csv('data.csv')
     test = data.iloc[n * 128:n * 128 + 128].values
 
+    # Пример использования
     mdl = Model('face', ['back', 'forward', 'left', 'neutral', 'right'])
     result = mdl.process_data(test)
 
