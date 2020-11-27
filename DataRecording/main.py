@@ -15,9 +15,14 @@ from threading import Thread
 from time import time
 from time import sleep
 from random import choice
+import numpy as np
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from example_epoc_plus import EEG, tasks
+
+sys.path.insert(1, '../NN')
+
+from Model import Model
 
 # EEG class
 cyHeadset = None
@@ -34,34 +39,40 @@ except Exception as e:
     print(e)
 
 # Получаем список картинок
-imagesFiles = os.listdir(IMAGES_DIR)
+# imagesFiles = os.listdir(IMAGES_DIR)
 
 # Возможные классы - это все файлы в папке IMAGES_DIR без расширения:
-types = [file[:file.rfind('.')] for file in imagesFiles]
+# types = [file[:file.rfind('.')] for file in imagesFiles]
 
 # Размер, под высоту которого будут растягиваться изображения из IMAGES_DIR
 imageSize = QtCore.QSize(640, 480)
 
 data = []
 
+mainWidget = None
+
+model = None
+
 
 def processData(data):
-    pass
+    global model
+    if model is not None:
+        addTextToWidget(model.process_data(np.array(data)))
 
 
 def dataReceived(value):
     global data
     data.append(value)
     if len(data) >= HEADSET_FREQUENCY:
-        processData(data)
+        processData(data.copy())
     data = []
 
 
 def addTextToWidget(text):
-    """Добавляет в виджет новую строку текста
-    """
+    """Добавляет в виджет новую строку текста"""
 
-    w.textWidget.setText(w.textWidget.toPlainText() + text + '\n')
+    mainWidget.textWidget.setText(
+        mainWidget.textWidget.toPlainText() + text + '\n')
 
 
 class RecordingThread(Thread):
@@ -97,17 +108,23 @@ class Widget(QtWidgets.QWidget):
     timeout = QtCore.pyqtSignal()
     recordingInterrupted = QtCore.pyqtSignal()
 
-    def __init__(self, types=['1', '2', '3']):
+    def __init__(self, model):
         global IMAGES_DIR
         super().__init__()
 
+        self.imagesDir = IMAGES_DIR + '/' + model
+
         self.recordingThread = None
-        self.types = types
+
+        self.imagesFiles = os.listdir(self.imagesDir)
+        self.types = [file[:file.rfind('.')] for file in self.imagesFiles]
+
         mainLayout = QtWidgets.QHBoxLayout()
         mainLayout.setAlignment(QtCore.Qt.AlignCenter)
         self.setLayout(mainLayout)
 
-        self.radioButtons = [QtWidgets.QRadioButton(str(x)) for x in types]
+        self.radioButtons = [QtWidgets.QRadioButton(str(x))
+                             for x in self.types]
         groupBox = QtWidgets.QGroupBox('Варианты')
 
         buttonsLayout = QtWidgets.QVBoxLayout()
@@ -369,9 +386,9 @@ class Widget(QtWidgets.QWidget):
         return w
 
     def getImagePath(self, type):
-        for image in imagesFiles:
+        for image in self.imagesFiles:
             if type == image[:image.rfind('.')]:
-                return IMAGES_DIR + '/' + image
+                return self.imagesDir + '/' + image
 
     def setImageWidget(self, type):
         pixmap = QtGui.QPixmap(self.getImagePath(type))
@@ -462,6 +479,58 @@ class CounterWidget(QtWidgets.QWidget):
         self.setNewCount(self.getNewCount() + 1)
 
 
+class ModelListWidget(QtWidgets.QWidget):
+    def __init__(self, models):
+        super().__init__()
+        groupBox = QtWidgets.QGroupBox('Варианты')
+
+        self.radioButtons = [QtWidgets.QRadioButton(model)
+                             for model in models]
+
+        layout = QtWidgets.QVBoxLayout()
+        for b in self.radioButtons:
+            layout.addWidget(b)
+        groupBox.setLayout(layout)
+        self.radioButtons[0].setChecked(True)
+
+        self.returnButton = QtWidgets.QPushButton("Ок")
+
+    def getModel(self):
+        loop = QtCore.QEventLoop()
+        self.returnButton.clicked.connect(loop.quit)
+        loop.exec()
+        for b in self.radioButtons:
+            if b.isChecked():
+                return b.text()
+
+
+def getModel():
+    l = os.listdir(IMAGES_DIR)
+    models = []
+    for a in l:
+        if os.path.isdir(IMAGES_DIR + '/' + a):
+            models.append(a)
+    print(models)
+    if len(models) == 1:
+        return models[0]
+    w = ModelListWidget(models)
+    w.show()
+    return w.getModel()
+
+
+def loadModel(modelName):
+    global model
+    try:
+        model = Model(modelName, mainWidget.types)
+        addTextToWidget("Модель " + modelName
+                        + " успешно загружена.")
+    except Exception as e:
+        print("Не удалось загрузить модель")
+        print(e)
+        addTextToWidget("Не удалось загрузить модель "
+                        + modelName + ".")
+
+
 def clearTasks():
     global tasks
     while not tasks.empty():
@@ -469,7 +538,7 @@ def clearTasks():
 
 
 def clearTasksIfNotRecording():
-    if not w.isRecording():
+    if not mainWidget.isRecording():
         clearTasks()
 
 
@@ -486,26 +555,26 @@ def checkRecording():
     count = tasks.qsize()
     if count != 0:
         return
-    if not isDebugging and not w.isRecording():
+    if not isDebugging and not mainWidget.isRecording():
         print('Данные не считываются!')
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    w = Widget(types)
-    w.show()
+    modelName = getModel()
+    mainWidget = Widget(modelName)
+    mainWidget.show()
 
-
+    loadModel(modelName)
 
     # Очищает очередь tasks раз в секунду, если не идет запись
-    tasksCleaner = QtCore.QTimer(w)
+    tasksCleaner = QtCore.QTimer(mainWidget)
     tasksCleaner.timeout.connect(clearTasksIfNotRecording)
     tasksCleaner.start(1000)
 
     # Проверяет, считываются ли данные с гарнитуры
-    recordingChecker = QtCore.QTimer(w)
+    recordingChecker = QtCore.QTimer(mainWidget)
     recordingChecker.timeout.connect(checkRecording)
     recordingChecker.start(500)
 
-    sys.exit(app.exec_())
-
+    # sys.exit(app.exec_())
