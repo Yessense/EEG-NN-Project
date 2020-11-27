@@ -57,22 +57,25 @@ model = None
 def processData(data):
     global model
     if model is not None:
-        addTextToWidget(model.process_data(np.array(data)))
+        addTextToWidget(model.process_data(np.array(data, dtype = 'O')))
 
 
 def dataReceived(value):
     global data
+    for i in range(2,len(value)):
+        value[i] = float(value[i])
     data.append(value)
     if len(data) >= HEADSET_FREQUENCY:
         processData(data.copy())
-    data = []
+        data = []
 
 
 def addTextToWidget(text):
     """Добавляет в виджет новую строку текста"""
-
-    mainWidget.textWidget.setText(
-        mainWidget.textWidget.toPlainText() + text + '\n')
+    print(text)
+    # print(type(mainWidget.textWidget))
+    # mainWidget.textWidget.setText('asdfasdf' + '\n')
+    # print('asdf')
 
 
 class RecordingThread(Thread):
@@ -577,4 +580,8 @@ if __name__ == '__main__':
     recordingChecker.timeout.connect(checkRecording)
     recordingChecker.start(500)
 
-    # sys.exit(app.exec_())
+    sys.exit(app.exec_())
+
+
+
+
