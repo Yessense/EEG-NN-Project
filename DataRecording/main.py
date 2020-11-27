@@ -495,6 +495,8 @@ if __name__ == '__main__':
     w = Widget(types)
     w.show()
 
+
+
     # Очищает очередь tasks раз в секунду, если не идет запись
     tasksCleaner = QtCore.QTimer(w)
     tasksCleaner.timeout.connect(clearTasksIfNotRecording)
