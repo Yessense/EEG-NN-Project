@@ -48,6 +48,10 @@ except Exception as e:
 # Размер, под высоту которого будут растягиваться изображения из IMAGES_DIR
 imageSize = QtCore.QSize(640, 480)
 
+# Размер индикатора, показывающего, удается ли получить
+# данные с гарнитуры
+recordingIndicatorSize = QtCore.QSize(20, 20)
+
 data = []
 
 mainWidget = None
@@ -131,16 +135,21 @@ class Widget(QtWidgets.QWidget):
     timeout = QtCore.pyqtSignal()
     recordingInterrupted = QtCore.pyqtSignal()
     addPredictedClass = QtCore.pyqtSignal('QString')
+    addLine = QtCore.pyqtSignal('QString')
+    recordingOk = QtCore.pyqtSignal('bool')
 
     def __init__(self, model):
         global IMAGES_DIR
         super().__init__()
-
+        self.setWindowTitle('Анализ ЭЭГ')
         self.addPredictedClass.connect(self.addClass)
+        self.addLine.connect(self.addLineToTextWidget)
+        self.recordingOk.connect(self.setRecordingOk)
 
         self.imagesDir = IMAGES_DIR + '/' + model
 
         self.recordingThread = None
+        self.isRecordingOk = None
 
         self.imagesFiles = os.listdir(self.imagesDir)
         self.types = [file[:file.rfind('.')] for file in self.imagesFiles]
@@ -204,6 +213,11 @@ class Widget(QtWidgets.QWidget):
         for t in self.types:
             self.countWidgets[t] = CounterWidget(t, count[t], 0)
             menuLayout.addWidget(self.countWidgets[t])
+
+        self.recordingIndicator = QtWidgets.QLabel()
+        self.recordingIndicator.setFixedSize(recordingIndicatorSize)
+        self.setRecordingOk(False)
+        menuLayout.addWidget(self.recordingIndicator)
 
         mainLayout.addLayout(menuLayout)
 
@@ -483,6 +497,16 @@ class Widget(QtWidgets.QWidget):
              + '\t' + type)
         self.addLineToTextWidget(s)
 
+    def setRecordingOk(self, ok):
+        if self.isRecordingOk == ok:
+            return
+        pixmap = QtGui.QPixmap(self.recordingIndicator.size())
+        if ok:
+            pixmap.fill(QtGui.QColorConstants.Green)
+        else:
+            pixmap.fill(QtGui.QColorConstants.Red)
+        self.recordingIndicator.setPixmap(pixmap)
+        self.isRecordingOk = ok
 
 class CounterWidget(QtWidgets.QWidget):
     def __init__(self, type, oldCount, newCount=0):
@@ -527,6 +551,7 @@ class CounterWidget(QtWidgets.QWidget):
 class ModelListWidget(QtWidgets.QWidget):
     def __init__(self, models):
         super().__init__()
+        self.setWindowTitle('Выбор модели')
         groupBox = QtWidgets.QGroupBox('Варианты')
 
         self.radioButtons = [QtWidgets.QRadioButton(model)
@@ -569,14 +594,14 @@ def loadModel(modelName):
     global model
     try:
         model = Model(modelName, mainWidget.types)
-        addTextToWidget("Модель " + modelName
-                        + " успешно загружена.\n" +
-                        "Время\tЦель\tВывод")
+        mainWidget.addLine.emit("Модель " + modelName
+                                + " успешно загружена.\n" +
+                                "Время\tЦель\tВывод")
     except Exception as e:
         print("Не удалось загрузить модель")
         print(e)
-        addTextToWidget("Не удалось загрузить модель "
-                        + modelName + ".")
+        mainWidget.addLine.emit("Не удалось загрузить модель "
+                                + modelName + ".")
 
 
 def clearTasks():
@@ -594,17 +619,21 @@ def checkRecording():
     # Если за 0,2 секунды не считалось ничего, вывести ошибку
     count = tasks.qsize()
     if count != 0:
+        mainWidget.recordingOk.emit(True)
         return
     sleep(.1)
     count = tasks.qsize()
     if count != 0:
+        mainWidget.recordingOk.emit(True)
         return
     sleep(.1)
     count = tasks.qsize()
     if count != 0:
+        mainWidget.recordingOk.emit(True)
         return
     if not isDebugging and not mainWidget.isRecording():
-        print('Данные не считываются!')
+        # print('Данные не считываются!')
+        mainWidget.recordingOk.emit(False)
 
 
 if __name__ == '__main__':
@@ -612,8 +641,10 @@ if __name__ == '__main__':
     modelName = getModel()
     mainWidget = Widget(modelName)
     mainWidget.show()
+    mainWidget.addLine.emit('Модель загружается...')
 
-    loadModel(modelName)
+    modelLoader = Thread(target=loadModel, args=[modelName])
+    modelLoader.start()
 
     # Очищает очередь tasks раз в секунду, если не идет запись
     tasksCleaner = QtCore.QTimer(mainWidget)
@@ -626,10 +657,3 @@ if __name__ == '__main__':
     recordingChecker.start(500)
 
     sys.exit(app.exec_())
-
-
-# TODO: Подписать названия окон
-# 1. Выбор модели
-# 2. Анализ ЭЭГ
-# TODO: Индикация возможности считывания
-# TODO: Модель загружается в другом потоке
