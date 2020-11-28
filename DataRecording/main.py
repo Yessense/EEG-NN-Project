@@ -270,6 +270,10 @@ class Widget(QtWidgets.QWidget):
         self._isRecording = False
         print('stop recording')
 
+        # Удаление данных
+        global data
+        data = []
+
         self.resetButton()
         # self.imageWidget.clear()
         self.optionWidget = QtWidgets.QWidget()
@@ -621,3 +625,9 @@ if __name__ == '__main__':
     recordingChecker.start(500)
 
     sys.exit(app.exec_())
+
+
+# TODO: Подписать названия окон
+# 1. Выбор модели
+# 2. Анализ ЭЭГ
+# TODO: Индикация возможности считывания
