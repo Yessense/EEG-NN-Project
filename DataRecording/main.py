@@ -479,8 +479,8 @@ class Widget(QtWidgets.QWidget):
 
     def addClass(self, type):
         s = (datetime.now().strftime('%H:%M:%S')
-             + '\nтекущий класс: ' + self.getType()
-             + '\nпредсказанный: ' + type + '\n')
+             + '\t' + self.getType()
+             + '\t' + type)
         self.addLineToTextWidget(s)
 
 
@@ -570,7 +570,8 @@ def loadModel(modelName):
     try:
         model = Model(modelName, mainWidget.types)
         addTextToWidget("Модель " + modelName
-                        + " успешно загружена.")
+                        + " успешно загружена.\n" +
+                        "Время\tЦель\tВывод")
     except Exception as e:
         print("Не удалось загрузить модель")
         print(e)
@@ -631,3 +632,4 @@ if __name__ == '__main__':
 # 1. Выбор модели
 # 2. Анализ ЭЭГ
 # TODO: Индикация возможности считывания
+# TODO: Модель загружается в другом потоке
