@@ -8,6 +8,7 @@ CSV_LABELS = [CLASS_COLUMN, ITER_COLUMN]
 CSV_LABELS.extend(SENSORS)
 DEFAULT_RECORDING_TIME = 5
 HEADSET_FREQUENCY = 128
+SECONDS_BETWEEN_PREDICTIONS = 0.25  # должно быть не больше 1.0
 # imports
 import sys
 import os
@@ -31,7 +32,7 @@ cyHeadset = None
 # При isDebugging = True программа игнорирует отсутсвтие
 # гарнитуры и не считывает с нее данные (даже если получилось
 # подключиться)
-isDebugging = False
+isDebugging = True
 
 # Получаем сообщение об ошибке, если гарнитура не работает
 try:
@@ -73,7 +74,10 @@ def dataReceived(value):
     data.append(value)
     if len(data) >= HEADSET_FREQUENCY:
         processData(data.copy())
-        data = []
+        countToRemove = (HEADSET_FREQUENCY *
+                         SECONDS_BETWEEN_PREDICTIONS)
+        for _ in range(int(countToRemove)):
+            data.pop(0)
 
 
 def addTextToWidget(text):
@@ -228,6 +232,11 @@ class Widget(QtWidgets.QWidget):
 
         self.textWidget = QtWidgets.QTextEdit()
         self.textWidget.setReadOnly(True)
+
+        metrics = QtGui.QFontMetrics(self.textWidget.currentFont())
+        textWidth = metrics.width("Время\t\tЦель\tВывод\t")
+
+        self.textWidget.setMinimumWidth(textWidth + 5)
 
         mainLayout.addWidget(self.textWidget)
 
@@ -492,8 +501,9 @@ class Widget(QtWidgets.QWidget):
         )
 
     def addClass(self, type):
-        s = (datetime.now().strftime('%H:%M:%S')
-             + '\t' + self.getType()
+        s = (datetime.now().time()
+             .isoformat(timespec='milliseconds')
+             + '\t\t' + self.getType()
              + '\t' + type)
         self.addLineToTextWidget(s)
 
@@ -507,6 +517,7 @@ class Widget(QtWidgets.QWidget):
             pixmap.fill(QtGui.QColor(255, 0, 0))
         self.recordingIndicator.setPixmap(pixmap)
         self.isRecordingOk = ok
+
 
 class CounterWidget(QtWidgets.QWidget):
     def __init__(self, type, oldCount, newCount=0):
@@ -596,7 +607,7 @@ def loadModel(modelName):
         model = Model(modelName, mainWidget.types)
         mainWidget.addLine.emit("Модель " + modelName
                                 + " успешно загружена.\n" +
-                                "Время\tЦель\tВывод")
+                                "Время\t\tЦель\tВывод")
     except Exception as e:
         print("Не удалось загрузить модель")
         print(e)
