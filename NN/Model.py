@@ -7,6 +7,8 @@ from torch.nn import functional as F
 
 from Classifier import Classifier
 from utils import create_fft, normalize
+
+
 class Model:
 
     def __init__(self, model_name, classes):

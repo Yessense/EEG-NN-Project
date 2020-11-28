@@ -502,9 +502,9 @@ class Widget(QtWidgets.QWidget):
             return
         pixmap = QtGui.QPixmap(self.recordingIndicator.size())
         if ok:
-            pixmap.fill(QtGui.QColorConstants.Green)
+            pixmap.fill(QtGui.QColor(0, 255, 0))
         else:
-            pixmap.fill(QtGui.QColorConstants.Red)
+            pixmap.fill(QtGui.QColor(255, 0, 0))
         self.recordingIndicator.setPixmap(pixmap)
         self.isRecordingOk = ok
 
