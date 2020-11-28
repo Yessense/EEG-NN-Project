@@ -14,15 +14,16 @@ import os
 from threading import Thread
 from time import time
 from time import sleep
+from datetime import datetime
 from random import choice
 import numpy as np
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from DataRecording.example_epoc_plus import EEG, tasks
+from example_epoc_plus import EEG, tasks
 
 sys.path.insert(1, '../NN')
 
-from NN.Model import Model
+from Model import Model
 
 # EEG class
 cyHeadset = None
@@ -58,7 +59,7 @@ def processData(data):
     global model
     if model is not None:
         s = model.process_data(np.array(data, dtype='O'))
-        mainWidget.addLine.emit(s)
+        mainWidget.addPredictedClass.emit(s)
 
 
 def dataReceived(value):
@@ -129,13 +130,13 @@ class Widget(QtWidgets.QWidget):
     _isRecording = False
     timeout = QtCore.pyqtSignal()
     recordingInterrupted = QtCore.pyqtSignal()
-    addLine = QtCore.pyqtSignal('QString')
+    addPredictedClass = QtCore.pyqtSignal('QString')
 
     def __init__(self, model):
         global IMAGES_DIR
         super().__init__()
 
-        self.addLine.connect(self.addLineToTextWidget)
+        self.addPredictedClass.connect(self.addClass)
 
         self.imagesDir = IMAGES_DIR + '/' + model
 
@@ -349,7 +350,7 @@ class Widget(QtWidgets.QWidget):
             else:
                 self.startButton.setText(str(num - 1))
 
-        except Exception as e:
+        except:
             self.countdownIsOk = False
             self.timeout.emit()
 
@@ -363,23 +364,27 @@ class Widget(QtWidgets.QWidget):
         self.stopRecording()
 
     def saveButtonClicked(self):
-        data = self.recordingThread.getData()
+        try:
+            data = self.recordingThread.getData()
 
-        # Открываем файл для записи измерений (append)
-        f = open(RECORDS_FILENAME, 'a')
+            # Открываем файл для записи измерений (append)
+            f = open(RECORDS_FILENAME, 'a')
 
-        # Если файл пустой - заполняем значения колонок
-        if os.path.getsize(RECORDS_FILENAME) == 0:
-            f.write(','.join(CSV_LABELS) + '\n')
+            # Если файл пустой - заполняем значения колонок
+            if os.path.getsize(RECORDS_FILENAME) == 0:
+                f.write(','.join(CSV_LABELS) + '\n')
 
-        # Записываем данные
-        for line in data:
-            f.write(','.join(line) + '\n')
+            # Записываем данные
+            for line in data:
+                l = [str(value) for value in line]
+                f.write(','.join(l) + '\n')
 
-        f.close()
+            f.close()
 
-        # Обносление счетчика
-        self.countWidgets[self.getType()].increase()
+            # Обносление счетчика
+            self.countWidgets[self.getType()].increase()
+        except Exception as e:
+            print(e)
 
     def eraseButtonClicked(self):
         self.data = []
@@ -467,6 +472,12 @@ class Widget(QtWidgets.QWidget):
         self.textWidget.setText(
             self.textWidget.toPlainText() + line + '\n'
         )
+
+    def addClass(self, type):
+        s = (datetime.now().strftime('%H:%M:%S')
+             + '\nтекущий класс: ' + self.getType()
+             + '\nпредсказанный: ' + type + '\n')
+        self.addLineToTextWidget(s)
 
 
 class CounterWidget(QtWidgets.QWidget):

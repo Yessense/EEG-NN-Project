@@ -5,8 +5,8 @@ import torch  # PyTorch
 from sklearn import preprocessing
 from torch.nn import functional as F
 
-from NN.Classifier import Classifier
-from NN.utils import create_fft, normalize
+from Classifier import Classifier
+from utils import create_fft, normalize
 class Model:
 
     def __init__(self, model_name, classes):
