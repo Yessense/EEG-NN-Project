@@ -32,7 +32,7 @@ cyHeadset = None
 # При isDebugging = True программа игнорирует отсутсвтие
 # гарнитуры и не считывает с нее данные (даже если получилось
 # подключиться)
-isDebugging = True
+isDebugging = os.path.exists('debugging')
 
 # Получаем сообщение об ошибке, если гарнитура не работает
 try:
@@ -77,7 +77,8 @@ def dataReceived(value):
         countToRemove = (HEADSET_FREQUENCY *
                          SECONDS_BETWEEN_PREDICTIONS)
         for _ in range(int(countToRemove)):
-            data.pop(0)
+            if len(data) > 0:  # если массив очистили в другом потоке
+                data.pop(0)
 
 
 def addTextToWidget(text):
@@ -119,7 +120,6 @@ class RecordingThread(Thread):
                 for i in range(2, len(data[-1])):
                     data[-1][i] = float(data[-1][i])
             f.close()
-            print('file closed')
             for i in range(0, len(data), 2):
                 # Цикл странный, потому что sleep ждет
                 # в больше необходимого времени при небольших
@@ -140,6 +140,7 @@ class Widget(QtWidgets.QWidget):
     recordingInterrupted = QtCore.pyqtSignal()
     addPredictedClass = QtCore.pyqtSignal('QString')
     addLine = QtCore.pyqtSignal('QString')
+    addMessage = QtCore.pyqtSignal('QString')
     recordingOk = QtCore.pyqtSignal('bool')
 
     def __init__(self, model):
@@ -148,6 +149,7 @@ class Widget(QtWidgets.QWidget):
         self.setWindowTitle('Анализ ЭЭГ')
         self.addPredictedClass.connect(self.addClass)
         self.addLine.connect(self.addLineToTextWidget)
+        self.addMessage.connect(self.addMessageToWidget)
         self.recordingOk.connect(self.setRecordingOk)
 
         self.imagesDir = IMAGES_DIR + '/' + model
@@ -222,7 +224,8 @@ class Widget(QtWidgets.QWidget):
         self.recordingIndicator.setFixedSize(recordingIndicatorSize)
         self.setRecordingOk(False)
         menuLayout.addWidget(self.recordingIndicator)
-
+        
+        menuLayout.setSpacing(7)
         mainLayout.addLayout(menuLayout)
 
         self.imageWidget = QtWidgets.QLabel()
@@ -230,15 +233,28 @@ class Widget(QtWidgets.QWidget):
         self.setImageWidget(self.getType())
         mainLayout.addWidget(self.imageWidget)
 
+        self.messageWidget = QtWidgets.QTextEdit()
+        self.messageWidget.setReadOnly(True)
+
         self.textWidget = QtWidgets.QTextEdit()
         self.textWidget.setReadOnly(True)
 
         metrics = QtGui.QFontMetrics(self.textWidget.currentFont())
         textWidth = metrics.width("Время\t\tЦель\tВывод\t")
+        messageTextHeight = metrics.height() * 4
 
         self.textWidget.setMinimumWidth(textWidth + 5)
 
-        mainLayout.addWidget(self.textWidget)
+        self.messageWidget.setFixedHeight(messageTextHeight)
+
+        textLayout = QtWidgets.QVBoxLayout()
+        textLayout.addWidget(self.messageWidget)
+        textLayout.addWidget(self.textWidget)
+
+        textLayout.setSpacing(7)
+        mainLayout.addLayout(textLayout)
+
+        mainLayout.setSpacing(60)
 
     def isRecording(self):
         return self._isRecording
@@ -263,7 +279,7 @@ class Widget(QtWidgets.QWidget):
         if self.isRecording():
             return
         self._isRecording = True
-        print('start recording')
+        # print('start recording')
 
         sleep(.1)  # Синхронизация с tasksCleaner
 
@@ -291,7 +307,7 @@ class Widget(QtWidgets.QWidget):
             return
 
         self._isRecording = False
-        print('stop recording')
+        # print('stop recording')
 
         # Удаление данных
         global data
@@ -452,6 +468,7 @@ class Widget(QtWidgets.QWidget):
         pixmap = pixmap.scaledToHeight(imageSize.height(),
                                        QtCore.Qt.SmoothTransformation)
         self.imageWidget.setPixmap(pixmap)
+        self.imageWidget.setFixedSize(pixmap.size())
 
     def getTypesCount(self):
         # Получение количества сессий для каждого класса
@@ -500,12 +517,21 @@ class Widget(QtWidgets.QWidget):
             self.textWidget.toPlainText() + line + '\n'
         )
 
+    def addMessageToWidget(self, message):
+        self.messageWidget.setText(
+            self.messageWidget.toPlainText() + message + '\n'
+        )
+
     def addClass(self, type):
-        s = (datetime.now().time()
+        s = ('\n' + datetime.now().time()
              .isoformat(timespec='milliseconds')
              + '\t\t' + self.getType()
-             + '\t' + type)
-        self.addLineToTextWidget(s)
+             + '\t' + type + '\n')
+        text = self.textWidget.toPlainText()
+        self.textWidget.setText(
+            text.replace('\n', s, 1)
+        )
+        # self.addLineToTextWidget(s)
 
     def setRecordingOk(self, ok):
         if self.isRecordingOk == ok:
@@ -579,6 +605,8 @@ class ModelListWidget(QtWidgets.QWidget):
 
         self.setLayout(layout)
 
+        self.resize(350, 100)
+
     def getModel(self):
         loop = QtCore.QEventLoop()
         self.returnButton.clicked.connect(loop.quit)
@@ -605,14 +633,14 @@ def loadModel(modelName):
     global model
     try:
         model = Model(modelName, mainWidget.types)
-        mainWidget.addLine.emit("Модель " + modelName
-                                + " успешно загружена.\n" +
-                                "Время\t\tЦель\tВывод")
+        mainWidget.addMessage.emit("Модель " + modelName
+                                   + " успешно загружена.\n")
+        mainWidget.addLine.emit("Время\t\tЦель\tВывод")
     except Exception as e:
         print("Не удалось загрузить модель")
         print(e)
-        mainWidget.addLine.emit("Не удалось загрузить модель "
-                                + modelName + ".")
+        mainWidget.addMessage.emit("Не удалось загрузить модель "
+                                   + modelName + ".")
 
 
 def clearTasks():
@@ -652,7 +680,12 @@ if __name__ == '__main__':
     modelName = getModel()
     mainWidget = Widget(modelName)
     mainWidget.show()
-    mainWidget.addLine.emit('Модель загружается...')
+
+    screenSize = app.desktop().size()
+    mainWidget.move((screenSize.width() - mainWidget.width())//2,
+                    (screenSize.height() - mainWidget.height())//2)
+
+    mainWidget.addMessage.emit('Модель загружается...')
 
     modelLoader = Thread(target=loadModel, args=[modelName])
     modelLoader.start()
