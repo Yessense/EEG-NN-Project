@@ -673,6 +673,12 @@ def checkRecording():
     if not isDebugging and not mainWidget.isRecording():
         # print('Данные не считываются!')
         mainWidget.recordingOk.emit(False)
+        if cyHeadset is None:
+            try:
+                global cyHeadset
+                cyHeadset = EEG()
+            except Exception as e:
+                print(e)
 
 
 if __name__ == '__main__':
