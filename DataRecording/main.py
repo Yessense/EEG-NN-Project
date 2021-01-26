@@ -142,6 +142,7 @@ class Widget(QtWidgets.QWidget):
     addLine = QtCore.pyqtSignal('QString')
     addMessage = QtCore.pyqtSignal('QString')
     recordingOk = QtCore.pyqtSignal('bool')
+    DEFAULT_ANIMATED_TYPE = 'default'
 
     def __init__(self, model):
         global IMAGES_DIR
@@ -158,7 +159,22 @@ class Widget(QtWidgets.QWidget):
         self.isRecordingOk = None
 
         self.imagesFiles = os.listdir(self.imagesDir)
+
+        self.isAnimated = False
+        for f in self.imagesFiles:
+            if f.find('.gif') >= 0:
+                self.isAnimated = True
+                break
+        if self.isAnimated:
+            i = len(self.imagesFiles) - 1
+            while i >= 0:
+                if self.imagesFiles[i].find('.gif') < 0:
+                    self.imagesFiles.pop(i)
+                i -= 1
         self.types = [file[:file.rfind('.')] for file in self.imagesFiles]
+
+        if self.isAnimated:
+            self.types.remove(self.DEFAULT_ANIMATED_TYPE)
 
         mainLayout = QtWidgets.QHBoxLayout()
         mainLayout.setAlignment(QtCore.Qt.AlignCenter)
@@ -229,8 +245,11 @@ class Widget(QtWidgets.QWidget):
         mainLayout.addLayout(menuLayout)
 
         self.imageWidget = QtWidgets.QLabel()
-        self.imageWidget.setFixedSize(imageSize)
-        self.setImageWidget(self.getType())
+        self.imageWidget.resize(imageSize)
+        if self.isAnimated:
+            self.setImageWidget(self.DEFAULT_ANIMATED_TYPE)
+        else:
+            self.setImageWidget(self.getType())
         mainLayout.addWidget(self.imageWidget)
 
         self.messageWidget = QtWidgets.QTextEdit()
@@ -243,9 +262,10 @@ class Widget(QtWidgets.QWidget):
         textWidth = metrics.width("Время\t\tЦель\tВывод\t")
         messageTextHeight = metrics.height() * 4
 
-        self.textWidget.setMinimumWidth(textWidth + 5)
+        self.textWidget.setFixedWidth(textWidth + 5)
 
         self.messageWidget.setFixedHeight(messageTextHeight)
+        self.messageWidget.setFixedWidth(textWidth + 5)
 
         textLayout = QtWidgets.QVBoxLayout()
         textLayout.addWidget(self.messageWidget)
@@ -255,6 +275,10 @@ class Widget(QtWidgets.QWidget):
         mainLayout.addLayout(textLayout)
 
         mainLayout.setSpacing(60)
+
+    def resizeEvent(self, newSize):
+        pass
+        # print(newSize)
 
     def isRecording(self):
         return self._isRecording
@@ -273,7 +297,8 @@ class Widget(QtWidgets.QWidget):
                 return
 
     def typeChanged(self, type):
-        self.setImageWidget(self.getType())
+        if not self.isAnimated:
+            self.setImageWidget(self.getType())
 
     def startRecording(self):
         if self.isRecording():
@@ -292,7 +317,11 @@ class Widget(QtWidgets.QWidget):
         self.recordingInterrupted.connect(self.recordingThread.stopRecording)
         self.recordingThread.start()
 
+        if self.isAnimated:
+            self.setImageWidget(self.getType())
+
         self.countdown(self.spinBox.value())
+        
         self.stopRecording()
 
     def get_iter_class_number(self):
@@ -308,6 +337,9 @@ class Widget(QtWidgets.QWidget):
 
         self._isRecording = False
         # print('stop recording')
+
+        if self.isAnimated:
+            self.setImageWidget(self.DEFAULT_ANIMATED_TYPE)
 
         # Удаление данных
         global data
@@ -347,7 +379,8 @@ class Widget(QtWidgets.QWidget):
                 if not isDebugging:
                     self.resetButton()
                     return
-        self.setImageWidget(self.getType())
+        if not self.isAnimated:
+            self.setImageWidget(self.getType())
         self.countdown(3)
         if self.countdownIsOk:
             self.startRecording()
@@ -464,11 +497,16 @@ class Widget(QtWidgets.QWidget):
                 return self.imagesDir + '/' + image
 
     def setImageWidget(self, type):
-        pixmap = QtGui.QPixmap(self.getImagePath(type))
-        pixmap = pixmap.scaledToHeight(imageSize.height(),
-                                       QtCore.Qt.SmoothTransformation)
-        self.imageWidget.setPixmap(pixmap)
-        self.imageWidget.setFixedSize(pixmap.size())
+        if self.isAnimated:
+            movie = QtGui.QMovie(self.getImagePath(type))
+            self.imageWidget.setMovie(movie)
+            movie.start()
+        else:
+            pixmap = QtGui.QPixmap(self.getImagePath(type))
+            pixmap = pixmap.scaledToHeight(imageSize.height(),
+                                           QtCore.Qt.SmoothTransformation)
+            self.imageWidget.setPixmap(pixmap)
+            self.imageWidget.setFixedSize(pixmap.size())
 
     def getTypesCount(self):
         # Получение количества сессий для каждого класса
@@ -673,6 +711,12 @@ def checkRecording():
     if not isDebugging and not mainWidget.isRecording():
         # print('Данные не считываются!')
         mainWidget.recordingOk.emit(False)
+        global cyHeadset
+        if cyHeadset is None:
+            try:
+                cyHeadset = EEG()
+            except Exception as e:
+                print(e)
 
 
 if __name__ == '__main__':
