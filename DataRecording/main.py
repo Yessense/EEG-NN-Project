@@ -16,7 +16,7 @@ from threading import Thread
 from time import time
 from time import sleep
 from datetime import datetime
-from random import choice
+from random import choice, random
 import numpy as np
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -102,7 +102,7 @@ class RecordingThread(Thread):
     def run(self):
         global cyHeadset
         if not isDebugging:
-            for _ in range(self.seconds * HEADSET_FREQUENCY):
+            for _ in range(int(self.seconds * HEADSET_FREQUENCY)):
                 if self._stopRecording:
                     break
                 line = [self.type, str(self.iterNumber)]
@@ -142,16 +142,38 @@ class Widget(QtWidgets.QWidget):
     addLine = QtCore.pyqtSignal('QString')
     addMessage = QtCore.pyqtSignal('QString')
     recordingOk = QtCore.pyqtSignal('bool')
-    DEFAULT_ANIMATED_TYPE = 'default'
+    typeChanged = QtCore.pyqtSignal()
+
+    # Наибольшее и наименьшее время записи одного типа
+    # при записи со случайной сменой типов
+    __MINIMAL_TYPE_TIME = 2
+    __MAXIMAL_TYPE_TIME = 6
+
+    # Время в секундах между сменой цветов
+    # сигнализирующего виджета
+    # Значение умноженное на 3 обязательно должно быть
+    # меньше или равно __MINIMAL_TYPE_TIME
+    __COUNTDOWN_SIGNAL_TIME = 0.5
+
+    # Размер сигнализирующего виджета
+    __SIGNAL_WIDGET_SIZE = QtCore.QSize(50, 50)
 
     def __init__(self, model):
         global IMAGES_DIR
         super().__init__()
+        if (self.__COUNTDOWN_SIGNAL_TIME*3 > self.__MINIMAL_TYPE_TIME):
+            raise RuntimeError('Значение __COUNTDOWN_SIGNAL_TIME ' +
+                               '({}) '.format(self.__COUNTDOWN_SIGNAL_TIME) +
+                               'должно быть втрое меньше __MINIMAL_TYPE_TIME ' +
+                               '({})'.format(self.__MINIMAL_TYPE_TIME))
         self.setWindowTitle('Анализ ЭЭГ')
         self.addPredictedClass.connect(self.addClass)
         self.addLine.connect(self.addLineToTextWidget)
         self.addMessage.connect(self.addMessageToWidget)
         self.recordingOk.connect(self.setRecordingOk)
+        self.typeChanged.connect(self.typeChangedSlot)
+
+        self.typesQueue = []
 
         self.imagesDir = IMAGES_DIR + '/' + model
 
@@ -159,22 +181,7 @@ class Widget(QtWidgets.QWidget):
         self.isRecordingOk = None
 
         self.imagesFiles = os.listdir(self.imagesDir)
-
-        self.isAnimated = False
-        for f in self.imagesFiles:
-            if f.find('.gif') >= 0:
-                self.isAnimated = True
-                break
-        if self.isAnimated:
-            i = len(self.imagesFiles) - 1
-            while i >= 0:
-                if self.imagesFiles[i].find('.gif') < 0:
-                    self.imagesFiles.pop(i)
-                i -= 1
         self.types = [file[:file.rfind('.')] for file in self.imagesFiles]
-
-        if self.isAnimated:
-            self.types.remove(self.DEFAULT_ANIMATED_TYPE)
 
         mainLayout = QtWidgets.QHBoxLayout()
         mainLayout.setAlignment(QtCore.Qt.AlignCenter)
@@ -188,7 +195,7 @@ class Widget(QtWidgets.QWidget):
         buttonsLayout.setAlignment(QtCore.Qt.AlignLeft)
         for b in self.radioButtons:
             buttonsLayout.addWidget(b)
-            b.clicked.connect(self.typeChanged)
+            b.clicked.connect(self.typeChangedSlot)
         self.radioButtons[0].setChecked(True)
         groupBox.setLayout(buttonsLayout)
 
@@ -206,12 +213,15 @@ class Widget(QtWidgets.QWidget):
         spinBoxLayout.addWidget(self.spinBox)
         menuLayout.addLayout(spinBoxLayout)
 
+        self.changeableTypesCheckBox = QtWidgets.QCheckBox('Смена типов при записи')
+
         self.startButton = QtWidgets.QPushButton('Начать')
         self.stopButton = QtWidgets.QPushButton('Остановить')
         self.startButton.clicked.connect(self.startButtonClicked)
         self.stopButton.clicked.connect(self.stopButtonClicked)
         self.stopButton.clicked.connect(self.resetButton)
 
+        menuLayout.addWidget(self.changeableTypesCheckBox)
         menuLayout.addWidget(self.startButton)
         menuLayout.addWidget(self.stopButton)
 
@@ -240,16 +250,13 @@ class Widget(QtWidgets.QWidget):
         self.recordingIndicator.setFixedSize(recordingIndicatorSize)
         self.setRecordingOk(False)
         menuLayout.addWidget(self.recordingIndicator)
-        
+
         menuLayout.setSpacing(7)
         mainLayout.addLayout(menuLayout)
 
         self.imageWidget = QtWidgets.QLabel()
-        self.imageWidget.resize(imageSize)
-        if self.isAnimated:
-            self.setImageWidget(self.DEFAULT_ANIMATED_TYPE)
-        else:
-            self.setImageWidget(self.getType())
+        self.imageWidget.setFixedSize(imageSize)
+        self.setImageWidget(self.getType())
         mainLayout.addWidget(self.imageWidget)
 
         self.messageWidget = QtWidgets.QTextEdit()
@@ -262,10 +269,9 @@ class Widget(QtWidgets.QWidget):
         textWidth = metrics.width("Время\t\tЦель\tВывод\t")
         messageTextHeight = metrics.height() * 4
 
-        self.textWidget.setFixedWidth(textWidth + 5)
+        self.textWidget.setMinimumWidth(textWidth + 5)
 
         self.messageWidget.setFixedHeight(messageTextHeight)
-        self.messageWidget.setFixedWidth(textWidth + 5)
 
         textLayout = QtWidgets.QVBoxLayout()
         textLayout.addWidget(self.messageWidget)
@@ -276,9 +282,10 @@ class Widget(QtWidgets.QWidget):
 
         mainLayout.setSpacing(60)
 
-    def resizeEvent(self, newSize):
-        pass
-        # print(newSize)
+        self.signalWidget = SignalWidget(self.__SIGNAL_WIDGET_SIZE, self)
+        self.stopButton.clicked.connect(self.signalWidget.endCountdown)
+        self.signalWidget.move(0, 0)
+        self.signalWidget.finished.connect(self.changeType)
 
     def isRecording(self):
         return self._isRecording
@@ -286,7 +293,8 @@ class Widget(QtWidgets.QWidget):
     def getType(self):
         for i in range(len(self.radioButtons)):
             if self.radioButtons[i].isChecked():
-                return self.types[i]
+                # return self.types[i]
+                return self.radioButtons[i].text()
 
     def setType(self, type):
         if self.types.count(type) == 0:
@@ -294,11 +302,11 @@ class Widget(QtWidgets.QWidget):
         for i in range(len(self.radioButtons)):
             if self.radioButtons[i].text() == type:
                 self.radioButtons[i].setChecked(True)
+                self.typeChanged.emit()
                 return
 
-    def typeChanged(self, type):
-        if not self.isAnimated:
-            self.setImageWidget(self.getType())
+    def typeChangedSlot(self):
+        self.setImageWidget(self.getType())
 
     def startRecording(self):
         if self.isRecording():
@@ -317,12 +325,52 @@ class Widget(QtWidgets.QWidget):
         self.recordingInterrupted.connect(self.recordingThread.stopRecording)
         self.recordingThread.start()
 
-        if self.isAnimated:
-            self.setImageWidget(self.getType())
-
         self.countdown(self.spinBox.value())
-        
         self.stopRecording()
+
+    def startRecordingWithChangeableTypes(self):
+        self.typesQueue = []  # список, содержащий время показа каждого класса
+        while sum(self.typesQueue) < self.spinBox.value():
+            d = self.spinBox.value() - sum(self.typesQueue)
+            if d < self.__MINIMAL_TYPE_TIME:
+                self.typesQueue.pop()
+            elif d > self.__MAXIMAL_TYPE_TIME:
+                self.typesQueue.append(self.__MINIMAL_TYPE_TIME +
+                                       random()*(
+                                           self.__MAXIMAL_TYPE_TIME
+                                           - self.__MINIMAL_TYPE_TIME))
+            else:
+                self.typesQueue.append(d)
+
+        # self.changeableTypesRecordingStarted.emit()
+        self.setChangeableTypesTimer()
+        self.startRecording()
+
+    def setChangeableTypesTimer(self):
+        if len(self.typesQueue) == 0:
+            return
+        print(self.typesQueue)
+        timers = []
+        for i in range(len(self.typesQueue)):
+            length = int(sum(self.typesQueue[:i+1]) * 1000)
+
+            signalTimer = QtCore.QTimer(self)
+            signalTimer.timeout.connect(
+                lambda: self.signalWidget.startCountdown(
+                    self.__COUNTDOWN_SIGNAL_TIME))
+            signalTimer.timeout.connect(signalTimer.deleteLater)
+            self.recordingInterrupted.connect(signalTimer.deleteLater)
+            signalTimer.setInterval(int(length -
+                                    self.__COUNTDOWN_SIGNAL_TIME*3*1000))
+            timers.append(signalTimer)
+
+        for timer in timers:
+            timer.start()
+
+    def changeType(self):
+        types = list(self.types)
+        types.remove(self.getType())
+        self.setType(choice(types))
 
     def get_iter_class_number(self):
         return self.getItersCount(self.getType())
@@ -337,9 +385,6 @@ class Widget(QtWidgets.QWidget):
 
         self._isRecording = False
         # print('stop recording')
-
-        if self.isAnimated:
-            self.setImageWidget(self.DEFAULT_ANIMATED_TYPE)
 
         # Удаление данных
         global data
@@ -379,11 +424,14 @@ class Widget(QtWidgets.QWidget):
                 if not isDebugging:
                     self.resetButton()
                     return
-        if not self.isAnimated:
-            self.setImageWidget(self.getType())
+        self.setImageWidget(self.getType())
+
         self.countdown(3)
         if self.countdownIsOk:
-            self.startRecording()
+            if self.changeableTypesCheckBox.isChecked():
+                self.startRecordingWithChangeableTypes()
+            else:
+                self.startRecording()
         else:
             self.resetButton()
 
@@ -497,16 +545,11 @@ class Widget(QtWidgets.QWidget):
                 return self.imagesDir + '/' + image
 
     def setImageWidget(self, type):
-        if self.isAnimated:
-            movie = QtGui.QMovie(self.getImagePath(type))
-            self.imageWidget.setMovie(movie)
-            movie.start()
-        else:
-            pixmap = QtGui.QPixmap(self.getImagePath(type))
-            pixmap = pixmap.scaledToHeight(imageSize.height(),
-                                           QtCore.Qt.SmoothTransformation)
-            self.imageWidget.setPixmap(pixmap)
-            self.imageWidget.setFixedSize(pixmap.size())
+        pixmap = QtGui.QPixmap(self.getImagePath(type))
+        pixmap = pixmap.scaledToHeight(imageSize.height(),
+                                       QtCore.Qt.SmoothTransformation)
+        self.imageWidget.setPixmap(pixmap)
+        self.imageWidget.setFixedSize(pixmap.size())
 
     def getTypesCount(self):
         # Получение количества сессий для каждого класса
@@ -623,6 +666,70 @@ class CounterWidget(QtWidgets.QWidget):
         self.setNewCount(self.getNewCount() + 1)
 
 
+class SignalWidget(QtWidgets.QLabel):
+    # startCountdown = QtCore.pyqtSignal()
+    red = QtGui.QColor(255, 0, 0)
+    yellow = QtGui.QColor(255, 255, 0)
+    green = QtGui.QColor(0, 255, 0)
+    # Константы, представляющие собой возможные состояния виджета
+    __HIDDEN, __GREEN, __YELLOW, __RED = 0, 1, 2, 3
+
+    finished = QtCore.pyqtSignal()
+
+    def __init__(self, size, parent=None):
+        super().__init__(parent)
+        self.currentState = self.__HIDDEN
+        self.setFixedSize(size)
+        self.setColor(self.green)
+        self.timer = None
+        self.hide()
+
+    def setColor(self, color):
+        pixmap = QtGui.QPixmap(self.size())
+        pixmap.fill(color)
+        self.setPixmap(pixmap)
+
+    def startCountdown(self, seconds):
+        if self.currentState != self.__HIDDEN:
+            return
+
+        if self.timer is not None:
+            self.timer.timeout.disconnect()
+            self.timer.deleteLater()
+
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(self.changeState)
+        self.timer.start(int(seconds * 1000))
+
+    def changeState(self):
+        if self.currentState == self.__HIDDEN:
+            self.currentState = self.__GREEN
+            self.setColor(self.green)
+            self.show()
+
+        elif self.currentState == self.__GREEN:
+            self.currentState = self.__YELLOW
+            self.setColor(self.yellow)
+
+        elif self.currentState == self.__YELLOW:
+            self.currentState = self.__RED
+            self.setColor(self.red)
+
+        else:
+            self.endCountdown()
+
+    def endCountdown(self):
+        if self.timer is not None:
+            self.timer.stop()
+            self.timer.timeout.disconnect()
+            self.timer.deleteLater()
+            self.timer = None
+        self.currentState = self.__HIDDEN
+        self.setColor(self.green)
+        self.hide()
+        self.finished.emit()
+
+
 class ModelListWidget(QtWidgets.QWidget):
     def __init__(self, models):
         super().__init__()
@@ -711,12 +818,6 @@ def checkRecording():
     if not isDebugging and not mainWidget.isRecording():
         # print('Данные не считываются!')
         mainWidget.recordingOk.emit(False)
-        global cyHeadset
-        if cyHeadset is None:
-            try:
-                cyHeadset = EEG()
-            except Exception as e:
-                print(e)
 
 
 if __name__ == '__main__':
