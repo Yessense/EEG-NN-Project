@@ -173,7 +173,8 @@ class Widget(QtWidgets.QWidget):
         self.recordingOk.connect(self.setRecordingOk)
         self.typeChanged.connect(self.typeChangedSlot)
 
-        self.typesQueue = []
+        # self.typesQueue = []
+        self.signalTimers = []
 
         self.imagesDir = IMAGES_DIR + '/' + model
 
@@ -351,7 +352,10 @@ class Widget(QtWidgets.QWidget):
         if len(self.typesQueue) == 0:
             return
         print(self.typesQueue)
-        timers = []
+        for t in self.signalTimers:
+            t.stop()
+            t.deleteLater()
+        self.signalTimers = []
         for i in range(len(self.typesQueue)):
             length = int(sum(self.typesQueue[:i+1]) * 1000)
 
@@ -363,15 +367,18 @@ class Widget(QtWidgets.QWidget):
             self.recordingInterrupted.connect(signalTimer.deleteLater)
             signalTimer.setInterval(int(length -
                                     self.__COUNTDOWN_SIGNAL_TIME*3*1000))
-            timers.append(signalTimer)
+            self.signalTimers.append(signalTimer)
 
-        for timer in timers:
+        for timer in self.signalTimers:
             timer.start()
 
     def changeType(self):
-        types = list(self.types)
-        types.remove(self.getType())
-        self.setType(choice(types))
+        if len(self.signalTimers) > 0:
+            self.signalTimers.pop(0)
+            if len(self.signalTimers) > 0:
+                types = list(self.types)
+                types.remove(self.getType())
+                self.setType(choice(types))
 
     def get_iter_class_number(self):
         return self.getItersCount(self.getType())
