@@ -6,7 +6,7 @@ CLASS_COLUMN = 'class'
 SENSORS = 'F3 FC5 AF3 F7 T7 P7 O1 O2 P8 T8 F8 AF4 FC6 F4'.split(' ')
 CSV_LABELS = [CLASS_COLUMN, ITER_COLUMN]
 CSV_LABELS.extend(SENSORS)
-DEFAULT_RECORDING_TIME = 5
+DEFAULT_RECORDING_TIME = 32
 HEADSET_FREQUENCY = 128
 SECONDS_BETWEEN_PREDICTIONS = 0.25  # должно быть не больше 1.0
 # imports
@@ -105,7 +105,7 @@ class RecordingThread(Thread):
             for _ in range(int(self.seconds * HEADSET_FREQUENCY)):
                 if self._stopRecording:
                     break
-                line = [self.type, str(self.iterNumber)]
+                line = [mainWidget.getType(), str(self.iterNumber)]
                 line.extend([str(value) for value
                              in eval(cyHeadset.get_data())])
                 self.data.append(line)
@@ -214,6 +214,7 @@ class Widget(QtWidgets.QWidget):
         menuLayout.addLayout(spinBoxLayout)
 
         self.changeableTypesCheckBox = QtWidgets.QCheckBox('Смена типов при записи')
+        self.changeableTypesCheckBox.setChecked(True)
 
         self.startButton = QtWidgets.QPushButton('Начать')
         self.stopButton = QtWidgets.QPushButton('Остановить')
