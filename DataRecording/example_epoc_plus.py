@@ -64,6 +64,8 @@ class EEG(object):
         if str(data[1]) == "32": # No Gyro Data.
             return
         tasks.put(data)
+        # print(data)
+        # print(type(data))
 
     def convertEPOC_PLUS(self, value_1, value_2):
         edk_value = "%.8f" % (((int(value_1) * .128205128205129) + 4201.02564096001) + ((int(value_2) -128) * 32.82051289))

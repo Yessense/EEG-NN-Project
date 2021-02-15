@@ -1,4 +1,6 @@
 # constants
+from NN.FeatureModel import FeatureModel
+
 RECORDS_FILENAME = 'data.csv'
 IMAGES_DIR = 'images'
 ITER_COLUMN = 'iter'
@@ -6,7 +8,7 @@ CLASS_COLUMN = 'class'
 SENSORS = 'F3 FC5 AF3 F7 T7 P7 O1 O2 P8 T8 F8 AF4 FC6 F4'.split(' ')
 CSV_LABELS = [CLASS_COLUMN, ITER_COLUMN]
 CSV_LABELS.extend(SENSORS)
-DEFAULT_RECORDING_TIME = 32
+DEFAULT_RECORDING_TIME = 8
 HEADSET_FREQUENCY = 128
 SECONDS_BETWEEN_PREDICTIONS = 0.25  # должно быть не больше 1.0
 # imports
@@ -25,6 +27,7 @@ from example_epoc_plus import EEG, tasks
 sys.path.insert(1, '../NN')
 
 from Model import Model
+from FeatureModel import FeatureModel
 
 # EEG class
 cyHeadset = None
@@ -785,7 +788,7 @@ def getModel():
 def loadModel(modelName):
     global model
     try:
-        model = Model(modelName, mainWidget.types)
+        model = FeatureModel(modelName, mainWidget.types)
         mainWidget.addMessage.emit("Модель " + modelName
                                    + " успешно загружена.\n")
         mainWidget.addLine.emit("Время\t\tЦель\tВывод")
