@@ -403,24 +403,10 @@ class Widget(QtWidgets.QWidget):
 
         self.resetButton()
         # self.imageWidget.clear()
-        self.optionWidget = QtWidgets.QWidget()
-        self.optionWidget.setWindowTitle('Запись закончена')
-        l = QtWidgets.QVBoxLayout()
-        self.optionWidget.setLayout(l)
-        l.addWidget(QtWidgets.QLabel('Сохранить данные?'))
-
-        bl = QtWidgets.QHBoxLayout()
-        bAccept = QtWidgets.QPushButton('Да')
-        bAccept.clicked.connect(self.saveButtonClicked)
-        bAccept.clicked.connect(self.optionWidget.close)
-        bDecline = QtWidgets.QPushButton('Нет')
-        bDecline.clicked.connect(self.eraseButtonClicked)
-        bDecline.clicked.connect(self.optionWidget.close)
-        bl.addWidget(bAccept)
-        bl.addWidget(bDecline)
-        l.addLayout(bl)
+        self.optionWidget = SaveDialogWidget()
+        self.optionWidget.accepted.connect(self.saveButtonClicked)
+        self.optionWidget.declined.connect(self.eraseButtonClicked)
         self.optionWidget.setWindowModality(QtCore.Qt.ApplicationModal)
-        self.optionWidget.setFixedSize(320, 120)
         self.optionWidget.show()
 
     def startButtonClicked(self):
@@ -636,6 +622,17 @@ class Widget(QtWidgets.QWidget):
         self.recordingIndicator.setPixmap(pixmap)
         self.isRecordingOk = ok
 
+    def keyPressEvent(self, event):
+        # print(event.nativeVirtualKey())
+        # print(event.key())
+        if event.key() == QtCore.Qt.Key_Space:
+            self.randomStartButtonClicked()
+            # self.setFocus()
+        elif event.key() == QtCore.Qt.Key_Escape:
+            self.setFocus()
+
+    def mousePressEvent(self, event):
+        self.setFocus()
 
 class CounterWidget(QtWidgets.QWidget):
     def __init__(self, type, oldCount, newCount=0):
@@ -675,6 +672,35 @@ class CounterWidget(QtWidgets.QWidget):
 
     def increase(self):
         self.setNewCount(self.getNewCount() + 1)
+
+
+class SaveDialogWidget(QtWidgets.QWidget):
+    accepted = QtCore.pyqtSignal()
+    declined = QtCore.pyqtSignal()
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Запись закончена')
+        l = QtWidgets.QVBoxLayout()
+        self.setLayout(l)
+        l.addWidget(QtWidgets.QLabel('Сохранить данные?'))
+        self.accepted.connect(self.close)
+        self.declined.connect(self.close)
+
+        bl = QtWidgets.QHBoxLayout()
+        bAccept = QtWidgets.QPushButton('Да')
+        bAccept.clicked.connect(self.accepted)
+        bDecline = QtWidgets.QPushButton('Нет')
+        bDecline.clicked.connect(self.declined)
+        bl.addWidget(bAccept)
+        bl.addWidget(bDecline)
+        l.addLayout(bl)
+        self.setFixedSize(320, 120)
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Space:
+            self.accepted.emit()
+        elif event.key() == QtCore.Qt.Key_Escape:
+            self.declined.emit()
 
 
 class SignalWidget(QtWidgets.QLabel):
