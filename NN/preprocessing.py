@@ -1,74 +1,40 @@
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import TransformerMixin
 import numpy as np
-import scipy
-import scipy.signal
 
 
-class ID(BaseEstimator, TransformerMixin):
-    def fit(self, X, y=None):
-        return self
+class FFT(TransformerMixin):
+    def __init__(self):
+        pass
 
-    def fit_transform(self, X, y=None, **fit_params):
-        return X
-
-    def transform(self, X, y=None):
-        return X
-
-
-class FrequencyRanges(BaseEstimator, TransformerMixin):
-    def __init__(self, frequencies=None):
-        if frequencies is None:
-            self.frequencies = [(1, 4), (4, 8), (8, 12), (12, 30), (30, 50)]
-
-    def fit(self, X, y=None):
-        return self
-
-    def GetButterSignal(self, fs: int, low: float, high: float, signal):
+    def absfft(self, arr):
         """
-
+        apply an abs(fft()) function to array
         Parameters
         ----------
-        fs : int
-            frequency
-        low : int
-            low bracket
-        high : int
-            high bracket
-        signal : ndarray
-            1d numpy array to calculate on
+        arr : ndarray
+
         Returns
         -------
         out : ndarray
         """
-        order = 4  # approximation
-        nyq = 0.5 * fs  # discretion's frequency
-        low = low / nyq  # lower bracket
-        high = high / nyq  # top bracket
-        b, a = scipy.signal.butter(order, [low, high], 'bandpass', analog=False)
+        return np.abs(np.fft.rfft(arr))
 
-        y = scipy.signal.filtfilt(b, a, signal)
-        return y
-
-    def transform(self, X, y=None, **fit_params):
-        frequency_ranges_count = len(self.frequencies)
-        columns_count = X.shape[-1]
-
-        X_new = np.zeros((X.shape[0], X.shape[1], X.shape[2] * frequency_ranges_count))
-        for i in range(len(self.frequencies)):
-            for j in range(columns_count):
-                X_new[:, :, j * frequency_ranges_count + i] = \
-                    self.GetButterSignal(X.shape[1], self.frequencies[i][0],
-                                         self.frequencies[i][1], X[:,:,j])
-
-        return X_new
+    def fit(self, X, y=None, **fit_params):
+        return self
 
     def fit_transform(self, X, y=None, **fit_params):
-        return self.transform(X, y=None, **fit_params)
+        self.fit(X, y, fit_params=fit_params)
+        return self.transform(X, y)
+
+    def transform(self, X, y=None):
+        return np.apply_along_axis(self.absfft, 1, X)
 
 
-class Normalize(TransformerMixin):
-    @staticmethod
-    def normalize_3d(arr):
+class Scale(TransformerMixin):
+    def __init__(self):
+        pass
+
+    def scale(self, arr):
         """
         subtracts mean by each record for each column
         Parameters
@@ -88,14 +54,67 @@ class Normalize(TransformerMixin):
             out[:, :, i] = np_arr
         return out
 
-    def fit(self, X, y=None, **fit_params):
-        return self
-
     def fit_transform(self, X, y=None, **fit_params):
-        self.fit(X, y=None, **fit_params)
+        self.fit(X, y=None, fit_params=fit_params)
         return self.transform(X, y=None)
 
     def transform(self, X, y=None):
-        return self.normalize_3d(X)
+        return self.scale(X)
+
+    def fit(self, X, y=None, **fit_params):
+        return self
 
 
+class Normalize(TransformerMixin):
+    def __init__(self):
+        pass
+
+    def get_mean(self, arr):
+        mean = arr.mean(axis=(0, 1))
+        return mean
+
+    def get_std(self, arr):
+        std = arr.std(axis=(0, 1))
+        return std
+
+    def normalize(self, arr, mean, std):
+        """
+        function subtract mean by channelwise and divides by std
+        Parameters
+        ----------
+        arr: ndarray
+
+        Returns
+        -------
+        out: ndarray
+
+        """
+        out = arr - mean[np.newaxis, :]
+        out /= std[np.newaxis, :]
+        return out
+
+    def fit_transform(self, X, y=None, **fit_params):
+        self.fit(X, y=None, fit_params=fit_params)
+        return self.transform(X)
+
+    def transform(self, X, y=None):
+        return self.normalize(X, mean=self.mean, std=self.std)
+
+    def fit(self, X, y=None, **fit_params):
+        self.mean = self.get_mean(X)
+        self.std = self.get_std(X)
+
+
+class Transpose(TransformerMixin):
+    def __init__(self):
+        pass
+
+    def fit_transform(self, X, y=None, **fit_params):
+        self.fit(X, y=None, fit_params=fit_params)
+        return self.transform(X)
+
+    def transform(self, X, y=None):
+        return X.transpose(0, 2, 1)
+
+    def fit(self, X, y=None, **fit_params):
+        return self

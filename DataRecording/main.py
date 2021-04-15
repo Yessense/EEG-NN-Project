@@ -1,6 +1,6 @@
 # constants
 from NN.FeatureModel import FeatureModel
-
+from NN.Model_directions import Model
 RECORDS_FILENAME = 'data.csv'
 IMAGES_DIR = 'images'
 ITER_COLUMN = 'iter'
@@ -8,7 +8,7 @@ CLASS_COLUMN = 'class'
 SENSORS = 'F3 FC5 AF3 F7 T7 P7 O1 O2 P8 T8 F8 AF4 FC6 F4'.split(' ')
 CSV_LABELS = [CLASS_COLUMN, ITER_COLUMN]
 CSV_LABELS.extend(SENSORS)
-DEFAULT_RECORDING_TIME = 8
+DEFAULT_RECORDING_TIME = 16
 HEADSET_FREQUENCY = 128
 SECONDS_BETWEEN_PREDICTIONS = 0.25  # должно быть не больше 1.0
 # imports
@@ -26,8 +26,8 @@ from example_epoc_plus import EEG, tasks
 
 sys.path.insert(1, '../NN')
 
-from Model import Model
-from FeatureModel import FeatureModel
+# from Model import Model
+# from FeatureModel import FeatureModel
 
 # EEG class
 cyHeadset = None
@@ -433,22 +433,25 @@ class Widget(QtWidgets.QWidget):
             self.resetButton()
 
     def randomStartButtonClicked(self):
-        counts = dict.fromkeys(self.types)
-        for t in self.types:
-            counts[t] = self.getItersCount(t)
-        maxCount = self.randomSessionCountInput.value()
-        allMax = True
-        for t in self.types:
-            if counts[t] < maxCount:
-                allMax = False
-                break
-        if allMax:
-            return
-        t = choice(self.types)
-        while counts[t] >= maxCount:
+        try:
+            counts = dict.fromkeys(self.types)
+            for t in self.types:
+                counts[t] = self.getItersCount(t)
+            maxCount = self.randomSessionCountInput.value()
+            allMax = True
+            for t in self.types:
+                if counts[t] < maxCount:
+                    allMax = False
+                    break
+            if allMax:
+                return
             t = choice(self.types)
-        self.setType(t)
-        self.startButtonClicked()
+            while counts[t] >= maxCount:
+                t = choice(self.types)
+            self.setType(t)
+            self.startButtonClicked()
+        except Exception as e:
+            print(e)
 
     def countdown(self, seconds, blocking=True):
         self.startButton.setText(str(seconds))
@@ -624,7 +627,6 @@ class Widget(QtWidgets.QWidget):
 
     def keyPressEvent(self, event):
         # print(event.nativeVirtualKey())
-        # print(event.key())
         if event.key() == QtCore.Qt.Key_Space:
             self.randomStartButtonClicked()
             # self.setFocus()
@@ -814,7 +816,8 @@ def getModel():
 def loadModel(modelName):
     global model
     try:
-        model = FeatureModel(modelName, mainWidget.types)
+        # model = FeatureModel(modelName, mainWidget.types)
+        model = Model('best.pth', mainWidget.types)
         mainWidget.addMessage.emit("Модель " + modelName
                                    + " успешно загружена.\n")
         mainWidget.addLine.emit("Время\t\tЦель\tВывод")
